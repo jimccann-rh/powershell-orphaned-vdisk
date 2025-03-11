@@ -73,13 +73,13 @@ try {
             $outputString = "VMDK '$($item.Filename)' (Name: $($item.Name), ID: $($item.ID)) is not assigned to any VM."
                 if ($RemoveOrphaned) {
                     try {
-                        $outputString = Get-VDisk -Id '$($item.ID))' | Remove-VDisk -Confirm:$false
-                        Write-Host "Removed orphaned VMDK: $vmdkPath"
-                        $outputString = "Removed orphaned VMDK: $vmdkPath"
+                        $outputString += Get-VDisk -Id $($item.ID) | Remove-VDisk -Confirm:$false
+                        Write-Host "Removed orphaned VMDK: $($item.Filename)"
+                        $outputString += " *Removed orphaned VMDK: $($item.Filename)"
                     }
                     catch {
-                        Write-Error "Failed to remove VMDK '$vmdkPath': $_"
-                        $outputString = "Failed to remove VMDK '$vmdkPath': $_"
+                        Write-Error "Failed to remove VMDK '$($item.Filename)': $_"
+                        $outputString += "Failed to remove VMDK '$($item.Filename)': $_"
                     }
                 }
         }
