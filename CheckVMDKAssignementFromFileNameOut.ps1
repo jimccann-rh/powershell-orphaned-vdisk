@@ -14,12 +14,17 @@ if (-not $vCenterPassword) {
 
 # Connect to vCenter
 try {
-    Connect-VIServer -Server $vCenterServer -User $vCenterUser -Password $vCenterPassword
+    Connect-VIServer -Server $vCenterServer -User $vCenterUser -Password $vCenterPassword -force
 }
 catch {
     Write-Error "Failed to connect to vCenter: $_"
     exit 1
 }
+
+$x = $vCenterServer
+$filename1 = $x.Substring(0, $x.IndexOf('.') + 1 + $x.Substring($x.IndexOf('.') + 1).IndexOf('.'))  -replace "\.", "-"
+$filename1 += "-PROCESSED.txt"
+
 
 try {
     # Get all VMs
@@ -84,7 +89,7 @@ try {
                 }
         }
         Write-Host $outputString #output to console
-        $outputString | Out-File -FilePath ./PROCESSED.txt -Append -Encoding UTF8 #output to file
+        $outputString | Out-File -FilePath ./$filename1 -Append -Encoding UTF8 #output to file
     }
 }
 catch {
