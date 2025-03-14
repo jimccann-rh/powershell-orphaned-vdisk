@@ -23,7 +23,7 @@ catch {
 }
 
 $x = $vCenterServer
-$filename1 = $x.Substring(0, $x.IndexOf('.') + 1 + $x.Substring($x.IndexOf('.') + 1).IndexOf('.'))  -replace "\.", "-"
+$filename0 = $x.Substring(0, $x.IndexOf('.') + 1 + $x.Substring($x.IndexOf('.') + 1).IndexOf('.'))  -replace "\.", "-"
 $filename1 += "-INFO.txt"
 
 try {

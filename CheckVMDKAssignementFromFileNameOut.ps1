@@ -23,8 +23,9 @@ catch {
 }
 
 $x = $vCenterServer
-$filename1 = $x.Substring(0, $x.IndexOf('.') + 1 + $x.Substring($x.IndexOf('.') + 1).IndexOf('.'))  -replace "\.", "-"
-$filename1 += "-PROCESSED.txt"
+$filename0 = $x.Substring(0, $x.IndexOf('.') + 1 + $x.Substring($x.IndexOf('.') + 1).IndexOf('.'))  -replace "\.", "-"
+$filename1 += "-INFO.txt"
+$filename2 += "-PROCESSED.txt"
 
 
 try {
@@ -32,7 +33,7 @@ try {
     $vms = Get-VM
 
     # Read INFO.txt file
-    $infoFile = Get-Content -Path ./INFO.txt
+    $infoFile = Get-Content -Path ./$filename1
 
     # Loop through each line in the file and extract Name and Filename
     $vmdkInfo = @()
@@ -90,7 +91,7 @@ try {
                 }
         }
         Write-Host $outputString #output to console
-        $outputString | Out-File -FilePath ./$filename1 -Append -Encoding UTF8 #output to file
+        $outputString | Out-File -FilePath ./$filename2 -Append -Encoding UTF8 #output to file
     }
 }
 catch {
