@@ -25,7 +25,7 @@ catch {
 $x = $vCenterServer
 $filename0 = $x.Substring(0, $x.IndexOf('.') + 1 + $x.Substring($x.IndexOf('.') + 1).IndexOf('.'))  -replace "\.", "-"
 $filename1 += "-INFO.txt"
-$filename2 += "-PROCESSED.txt"
+$filename2 = $filename0 += "-PROCESSED.txt"
 
 
 try {
