@@ -27,6 +27,7 @@ $filename0 = $x.Substring(0, $x.IndexOf('.') + 1 + $x.Substring($x.IndexOf('.') 
 $filename1 = $filename0 += "-INFO.txt"
 $filename2 += "-PROCESSED.txt"
 
+Remove-Item -Path $filename2
 
 try {
     # Get all VMs

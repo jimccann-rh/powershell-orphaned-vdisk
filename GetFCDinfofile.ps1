@@ -26,6 +26,8 @@ $x = $vCenterServer
 $filename1 = $x.Substring(0, $x.IndexOf('.') + 1 + $x.Substring($x.IndexOf('.') + 1).IndexOf('.'))  -replace "\.", "-"
 $filename1 += "-INFO.txt"
 
+Remove-Item -Path $filename1
+
 try {
     # Get all First Class Disks
     $fcds = Get-VDisk
