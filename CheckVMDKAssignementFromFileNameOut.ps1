@@ -1,3 +1,4 @@
+#!/usr/bin/env pwsh
 # Requires VMware PowerCLI
 
 # Parameters
