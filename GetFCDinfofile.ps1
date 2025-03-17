@@ -56,7 +56,7 @@ catch {
 }
 finally {
     # Disconnect from vCenter Server
-    # Disconnect-VIServer -Confirm:$false
+    Disconnect-VIServer -Confirm:$false
     "Completed" | Out-File -FilePath ./$filename1 -Append -Encoding UTF8 #added to output to file.
     Write-Host "Completed" #keep console output
 }
