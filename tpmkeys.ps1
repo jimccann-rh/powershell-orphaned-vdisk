@@ -39,11 +39,10 @@ foreach ($VMHost in $VMHosts) {
         Write-Host "$VMHost;$($key.RecoveryID);$($key.Key)" | Out-File -FilePath ./$filename1 -Append -Encoding UTF8
     }
 
-    catch {
-        
-    }
-}
 
+catch {
+    Write-Error $_
+}
 finally {
     # Disconnect from vCenter Server
     Disconnect-VIServer -Confirm:$false
