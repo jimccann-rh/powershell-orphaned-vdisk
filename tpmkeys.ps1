@@ -42,10 +42,10 @@ foreach ($VMHost in $VMHosts) {
     catch {
         Write-Error $_
     }
-    finally {
-        # Disconnect from vCenter Server
-        Disconnect-VIServer -Confirm:$false
-        "Completed" | Out-File -FilePath ./$filename1 -Append -Encoding UTF8 #added to output to file.
-        Write-Host "Completed" #keep console output
-    }
 }
+
+# Disconnect from vCenter Server
+Disconnect-VIServer -Confirm:$false
+"Completed" | Out-File -FilePath ./$filename1 -Append -Encoding UTF8 #added to output to file.
+Write-Host "Completed" #keep console output
+
