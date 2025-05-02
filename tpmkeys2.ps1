@@ -55,7 +55,7 @@ function Get-EncryptionRecoveryKeys {
     Write-host $encryptionKeys
 }
 
-Get_encryptionRecoveryKeys | Out-File -FilePath ./$filename1 -Append -Encoding UTF8
+Get_EncryptionRecoveryKeys | Out-File -FilePath ./$filename1 -Append -Encoding UTF8
 
 # Disconnect from vCenter Server
 Disconnect-VIServer -Confirm:$false
