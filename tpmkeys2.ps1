@@ -30,7 +30,7 @@ Remove-Item -Path $filename1
 
 
 function Get-EncryptionRecoveryKeys {
-    $esxiHosts = get-vmhost | Where { $_.PowerState -eq "PoweredOn" -and $_.ConnectionState -eq "Connected" } | Sort Name
+    $esxiHosts = get-vmhost | Where { $_.PowerState -eq "PoweredOn" -and $_.ConnectionState -eq "Connected" }
     $encryptionKeys = @()
  
     foreach ($esxiHost in $esxiHosts) {
@@ -55,8 +55,7 @@ function Get-EncryptionRecoveryKeys {
     Write-host $encryptionKeys
 }
 
-"TPM Keys:" | Out-File -FilePath ./$filename1 -Append -Encoding UTF8
-"$encrpytionKeys" | Out-File -FilePath ./$filename1 -Append -Encoding UTF8
+Get_encryptionRecoveryKeys | Out-File -FilePath ./$filename1 -Append -Encoding UTF8
 
 # Disconnect from vCenter Server
 Disconnect-VIServer -Confirm:$false
