@@ -38,7 +38,7 @@ foreach ($VMHost in $VMHosts) {
         "TPM Keys:" | Out-File -FilePath ./$filename1 -Append -Encoding UTF8
         Write-Host "$VMHost;$($key.RecoveryID);$($key.Key)" | Out-File -FilePath ./$filename1 -Append -Encoding UTF8
     }
-
+}
 
 catch {
     Write-Error $_
