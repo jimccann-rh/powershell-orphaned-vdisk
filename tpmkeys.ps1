@@ -36,7 +36,8 @@ foreach ($VMHost in $VMHosts) {
     try {
         $key = $esxcli.system.settings.encryption.recovery.list()
         "TPM Keys:" | Out-File -FilePath ./$filename1 -Append -Encoding UTF8
-        Write-Host "$VMHost;$($key.RecoveryID);$($key.Key)" | Out-File -FilePath ./$filename1 -Append -Encoding UTF8
+        Write-Host "$VMHost;$($key.RecoveryID);$($key.Key)"
+        "$VMHost;$($key.RecoveryID);$($key.Key)" | Out-File -FilePath ./$filename1 -Append -Encoding UTF8
     }
 
     catch {
