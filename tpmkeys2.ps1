@@ -52,6 +52,7 @@ function Get-EncryptionRecoveryKeys {
     }
  
     return $encryptionKeys
+    Write-host $encryptionKeys
 }
 
 "TPM Keys:" | Out-File -FilePath ./$filename1 -Append -Encoding UTF8
