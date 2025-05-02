@@ -38,14 +38,14 @@ foreach ($VMHost in $VMHosts) {
         "TPM Keys:" | Out-File -FilePath ./$filename1 -Append -Encoding UTF8
         Write-Host "$VMHost;$($key.RecoveryID);$($key.Key)" | Out-File -FilePath ./$filename1 -Append -Encoding UTF8
     }
-}
 
-catch {
-    Write-Error $_
-}
-finally {
-    # Disconnect from vCenter Server
-    Disconnect-VIServer -Confirm:$false
-    "Completed" | Out-File -FilePath ./$filename1 -Append -Encoding UTF8 #added to output to file.
-    Write-Host "Completed" #keep console output
+    catch {
+        Write-Error $_
+    }
+    finally {
+        # Disconnect from vCenter Server
+        Disconnect-VIServer -Confirm:$false
+        "Completed" | Out-File -FilePath ./$filename1 -Append -Encoding UTF8 #added to output to file.
+        Write-Host "Completed" #keep console output
+    }
 }
