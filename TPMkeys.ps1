@@ -27,16 +27,22 @@ catch {
 # --- Directory and File Naming Handling ---
 
 # Define the directory name for output files
-$outputDirectory = "TPMFILES"
+$outputDirectoryName = "TPMFILES"
+
+# Get the user's home directory
+$homeDirectory = [System.Environment]::GetFolderPath('UserProfile')
+
+# Construct the full path for the output directory in the home directory
+$fullOutputDirectoryPath = Join-Path -Path $homeDirectory -ChildPath $outputDirectoryName
 
 # Create the output directory if it doesn't exist
-Write-Host "Ensuring output directory './$outputDirectory' exists..."
+Write-Host "Ensuring output directory '$fullOutputDirectoryPath' exists..."
 try {
-    New-Item -Path "./$outputDirectory" -ItemType Directory -Force | Out-Null
-    Write-Host "Output directory './$outputDirectory' is ready."
+    New-Item -Path $fullOutputDirectoryPath -ItemType Directory -Force | Out-Null
+    Write-Host "Output directory '$fullOutputDirectoryPath' is ready."
 }
 catch {
-    Write-Error "Failed to create or ensure output directory './$outputDirectory': $_"
+    Write-Error "Failed to create or ensure output directory '$fullOutputDirectoryPath': $_"
     Disconnect-VIServer -Confirm:$false # Attempt to disconnect before exiting
     exit 1
 }
@@ -49,8 +55,8 @@ $currentDate = Get-Date -Format "MMddyy"
 $vCenterBaseName = $vCenterServer.Substring(0, $vCenterServer.IndexOf('.') + 1 + $vCenterServer.Substring($vCenterServer.IndexOf('.') + 1).IndexOf('.')) -replace "\.", "-"
 $outputFileName = "$vCenterBaseName-$currentDate-TPM.txt"
 
-# Construct the full path for the output file
-$fullOutputPath = Join-Path -Path "./$outputDirectory" -ChildPath $outputFileName
+# Construct the full path for the output file inside the output directory
+$fullOutputPath = Join-Path -Path $fullOutputDirectoryPath -ChildPath $outputFileName
 
 Write-Host "Output will be saved to: $fullOutputPath"
 
