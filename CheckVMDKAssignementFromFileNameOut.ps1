@@ -283,15 +283,33 @@ try {
             $outputString = "VMDK '$($item.Filename)' (Name: $($item.Name), ID: $($item.ID)) is not assigned to any VM."
                 if ($RemoveOrphaned) {
                     try {
+                        # Try to get the VDisk first
+                        $vdisk = Get-VDisk -Id $($item.ID) -ErrorAction Stop
+                        
+                        if (-not $vdisk) {
+                            throw "VDisk with ID '$($item.ID)' not found or no longer exists"
+                        }
+                        
                         # Try to remove the VDisk directly
-                        $vdisk = Get-VDisk -Id $($item.ID)
                         Remove-VDisk -VDisk $vdisk -Confirm:$false -ErrorAction Stop
-                        Write-Host "Successfully removed orphaned VMDK: $($item.Filename)"
+                        Write-Host "Successfully removed orphaned VMDK: $($item.Filename)" -ForegroundColor Green
                         $outputString += " *Removed orphaned VMDK: $($item.Filename)"
                     }
                     catch {
+                        # Check if the VDisk was not found (already deleted or doesn't exist)
+                        if ($_.Exception.Message -like "*was not found*" -or 
+                            $_.Exception.Message -like "*not found or no longer exists*" -or
+                            $_.Exception.Message -like "*specified filter*" -or
+                            $_.Exception.Message -like "*Cannot validate argument*VDisk*null*") {
+                            Write-Warning "⚠️  VDisk '$($item.Filename)' (ID: $($item.ID)) was not found - may have already been deleted or is invalid"
+                            Write-Host "   This can happen if:" -ForegroundColor Yellow
+                            Write-Host "   - FCD was already removed by another process" -ForegroundColor White  
+                            Write-Host "   - FCD ID format has changed" -ForegroundColor White
+                            Write-Host "   - FCD is on a disconnected/unmounted datastore" -ForegroundColor White
+                            $outputString += " *VDisk not found - may have already been deleted or is invalid*"
+                        }
                         # Check if the error is related to snapshots
-                        if ($_.Exception.Message -like "*snapshot*" -or $_.Exception.Message -like "*Cannot be performed on FCD with snapshots*" -or $_ -like "*relies on this FCD*") {
+                        elseif ($_.Exception.Message -like "*snapshot*" -or $_.Exception.Message -like "*Cannot be performed on FCD with snapshots*" -or $_ -like "*relies on this FCD*") {
                             # Extract snapshot ID from error message if possible
                             $snapshotId = ""
                             if ($_.Exception.Message -match "Snapshot ([0-9a-f\s\-]+) relies on this FCD") {
