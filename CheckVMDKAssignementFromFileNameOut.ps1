@@ -81,13 +81,36 @@ try {
             $outputString = "VMDK '$($item.Filename)' (Name: $($item.Name), ID: $($item.ID)) is not assigned to any VM."
                 if ($RemoveOrphaned) {
                     try {
-                        $outputString += Get-VDisk -Id $($item.ID) | Remove-VDisk -Confirm:$false
+                        # Get the VDisk object
+                        $vdisk = Get-VDisk -Id $($item.ID)
+                        
+                        # Check for and remove snapshots first
+                        $snapshots = Get-VDiskSnapshot -VDisk $vdisk -ErrorAction SilentlyContinue
+                        if ($snapshots) {
+                            Write-Host "Found $($snapshots.Count) snapshot(s) for VMDK: $($item.Filename)"
+                            $outputString += " Found $($snapshots.Count) snapshot(s)."
+                            foreach ($snapshot in $snapshots) {
+                                try {
+                                    Remove-VDiskSnapshot -VDiskSnapshot $snapshot -Confirm:$false
+                                    Write-Host "Removed snapshot: $($snapshot.Name)"
+                                    $outputString += " Removed snapshot: $($snapshot.Name)."
+                                }
+                                catch {
+                                    Write-Error "Failed to remove snapshot '$($snapshot.Name)': $_"
+                                    $outputString += " Failed to remove snapshot '$($snapshot.Name)': $_"
+                                    throw # Re-throw to prevent FCD removal if snapshot removal fails
+                                }
+                            }
+                        }
+                        
+                        # Now remove the VDisk
+                        Remove-VDisk -VDisk $vdisk -Confirm:$false
                         Write-Host "Removed orphaned VMDK: $($item.Filename)"
                         $outputString += " *Removed orphaned VMDK: $($item.Filename)"
                     }
                     catch {
                         Write-Error "Failed to remove VMDK '$($item.Filename)': $_"
-                        $outputString += "Failed to remove VMDK '$($item.Filename)': $_"
+                        $outputString += " Failed to remove VMDK '$($item.Filename)': $_"
                     }
                 }
         }
