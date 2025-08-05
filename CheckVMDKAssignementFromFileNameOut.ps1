@@ -116,15 +116,24 @@ try {
                     try {
                         # Try to remove the VDisk directly
                         $vdisk = Get-VDisk -Id $($item.ID)
-                        Remove-VDisk -VDisk $vdisk -Confirm:$false
+                        Remove-VDisk -VDisk $vdisk -Confirm:$false -ErrorAction Stop
                         Write-Host "Successfully removed orphaned VMDK: $($item.Filename)"
                         $outputString += " *Removed orphaned VMDK: $($item.Filename)"
                     }
                     catch {
                         # Check if the error is related to snapshots
-                        if ($_.Exception.Message -like "*snapshot*" -or $_.Exception.Message -like "*Cannot be performed on FCD with snapshots*") {
+                        if ($_.Exception.Message -like "*snapshot*" -or $_.Exception.Message -like "*Cannot be performed on FCD with snapshots*" -or $_ -like "*relies on this FCD*") {
+                            # Extract snapshot ID from error message if possible
+                            $snapshotId = ""
+                            if ($_.Exception.Message -match "Snapshot ([0-9a-f\s\-]+) relies on this FCD") {
+                                $snapshotId = $matches[1].Trim()
+                            }
+                            
                             Write-Host "⚠️  FCD SNAPSHOT DETECTED: $($item.Filename)" -ForegroundColor Yellow
                             Write-Host "This FCD has snapshots and cannot be removed until snapshots are deleted." -ForegroundColor Yellow
+                            if ($snapshotId) {
+                                Write-Host "Detected Snapshot ID: $snapshotId" -ForegroundColor Red
+                            }
                             Write-Host ""
                             Write-Host "🔧 MANUAL REMOVAL OPTIONS:" -ForegroundColor Cyan
                             Write-Host "Option 1 - vSphere Client UI (Recommended):" -ForegroundColor Green
@@ -136,8 +145,13 @@ try {
                             Write-Host "Option 2 - GOVC Command Line:" -ForegroundColor Green
                             Write-Host "  # List snapshots:"
                             Write-Host "  govc disk.snapshot.ls $($item.ID)" -ForegroundColor White
-                            Write-Host "  # Remove each snapshot (use snapshot ID from list):"
-                            Write-Host "  govc disk.snapshot.rm $($item.ID) <snapshot-id>" -ForegroundColor White
+                            if ($snapshotId) {
+                                Write-Host "  # Remove the detected snapshot:"
+                                Write-Host "  govc disk.snapshot.rm $($item.ID) $snapshotId" -ForegroundColor White
+                            } else {
+                                Write-Host "  # Remove each snapshot (use snapshot ID from list):"
+                                Write-Host "  govc disk.snapshot.rm $($item.ID) <snapshot-id>" -ForegroundColor White
+                            }
                             Write-Host ""
                             Write-Host "Option 3 - vSphere MOB (Advanced):" -ForegroundColor Green
                             Write-Host "  URL: https://$vCenterServer/vslm/mob/?moid=VStorageObjectManager&method=VslmDeleteSnapshot_Task"
