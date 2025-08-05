@@ -21,6 +21,14 @@
 #    - Remove snapshot: govc disk.snapshot.rm <FCD-ID> <snapshot-ID>
 # 3. vSphere MOB: https://<vcenter>/vslm/mob/?moid=VStorageObjectManager&method=VslmDeleteSnapshot_Task
 
+# Parameters
+param(
+    [string]$vCenterServer,
+    [string]$vCenterUser,
+    [string]$vCenterPassword,
+    [switch]$RemoveOrphaned # Add a switch to control removal
+)
+
 # Helper functions for FCD snapshot management using vSphere API
 function Get-VDiskSnapshots {
     param(
@@ -107,14 +115,6 @@ function Remove-VDiskSnapshot {
         throw
     }
 }
-
-# Parameters
-param(
-    [string]$vCenterServer,
-    [string]$vCenterUser,
-    [string]$vCenterPassword,
-    [switch]$RemoveOrphaned # Add a switch to control removal
-)
 
 # Prompt for required parameters if not provided
 if (-not $vCenterServer) {
