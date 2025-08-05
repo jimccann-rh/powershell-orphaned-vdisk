@@ -14,7 +14,7 @@
 # AUTOMATED SNAPSHOT HANDLING:
 # ✅ Detects FCD snapshots automatically
 # ✅ Extracts snapshot IDs from error messages  
-# ✅ Calls vSphere VslmDeleteSnapshot_Task API directly
+# ✅ Calls vSphere DeleteSnapshot_Task API directly
 # ✅ Waits for snapshot removal completion
 # ✅ Removes the FCD automatically after snapshot cleanup
 # ✅ Provides manual fallback options if automation fails
@@ -143,22 +143,22 @@ function Remove-FCDSnapshot {
         $snapshotIdObj = New-Object VMware.Vim.ID
         $snapshotIdObj.Id = $SnapshotId
         
-        # Delete the snapshot using the VslmDeleteSnapshot_Task API
+        # Delete the snapshot using the DeleteSnapshot_Task API
         if (-not $vslmService) {
             throw "VSLM service is null - cannot proceed with snapshot deletion"
         }
         
         try {
-            Write-Host "Calling VslmDeleteSnapshot_Task method..." -ForegroundColor Yellow
+            Write-Host "Calling DeleteSnapshot_Task method..." -ForegroundColor Yellow
             Write-Host "Service object: $($vslmService.GetType().FullName)" -ForegroundColor Cyan
             Write-Host "FCD UUID: $FCDUuid" -ForegroundColor Cyan
             Write-Host "Snapshot ID: $SnapshotId" -ForegroundColor Cyan
             Write-Host "Datastore MoRef: $($Datastore.ExtensionData.MoRef.Type)-$($Datastore.ExtensionData.MoRef.Value)" -ForegroundColor Cyan
             
-            $task = $vslmService.VslmDeleteSnapshot_Task($storageObjectId, $Datastore.ExtensionData.MoRef, $snapshotIdObj)
-            Write-Host "VslmDeleteSnapshot_Task called successfully" -ForegroundColor Green
+            $task = $vslmService.DeleteSnapshot_Task($storageObjectId, $Datastore.ExtensionData.MoRef, $snapshotIdObj)
+            Write-Host "DeleteSnapshot_Task called successfully" -ForegroundColor Green
         } catch {
-            Write-Error "Failed to call VslmDeleteSnapshot_Task: $_"
+            Write-Error "Failed to call DeleteSnapshot_Task: $_"
             Write-Host "Debugging Information:" -ForegroundColor Red
             Write-Host "  vslmService type: $($vslmService.GetType().Name)" -ForegroundColor White
             Write-Host "  vslmService is null: $($vslmService -eq $null)" -ForegroundColor White
