@@ -59,29 +59,70 @@ function Remove-FCDSnapshot {
     try {
         Write-Host "Attempting to remove FCD snapshot automatically..." -ForegroundColor Cyan
         
-        # Get the VSLM Storage Object Manager (VslmVStorageObjectManager type)
+        # Get the correct VSLM Storage Object Manager
         $si = Get-View ServiceInstance
+        $vslmService = $null
         
-        # Create MoRef for VStorageObjectManager that should be of type VslmVStorageObjectManager
-        $vslmMoRef = New-Object VMware.Vim.ManagedObjectReference
-        $vslmMoRef.Type = "VslmVStorageObjectManager"
-        $vslmMoRef.Value = "VStorageObjectManager"
+        # Try multiple approaches to get the VSLM service
+        Write-Host "Attempting to locate VSLM service..." -ForegroundColor Yellow
         
-        try {
-            $vslmService = Get-View $vslmMoRef
-            Write-Host "Successfully connected to VslmVStorageObjectManager" -ForegroundColor Green
-        } catch {
-            Write-Host "Failed to get VslmVStorageObjectManager, trying fallback..." -ForegroundColor Yellow
-            # Fallback: try getting it from ServiceInstance content
-            $vslmService = Get-View $si.Content.VStorageObjectManager
+        # Approach 1: Try VStorageObjectManager from ServiceInstance
+        if ($si.Content.VStorageObjectManager) {
+            try {
+                $vslmService = Get-View $si.Content.VStorageObjectManager
+                Write-Host "Method 1: Found VStorageObjectManager via ServiceInstance" -ForegroundColor Green
+            } catch {
+                Write-Host "Method 1: Failed to get VStorageObjectManager from ServiceInstance" -ForegroundColor Red
+            }
         }
         
-        # Debug: Show what type of object we got
-        Write-Host "Storage Object Manager Type: $($vslmService.GetType().Name)" -ForegroundColor Cyan
+        # Approach 2: Check ServiceInstance properties for VSLM-related services
+        if (-not $vslmService) {
+            Write-Host "Method 2: Checking ServiceInstance content properties..." -ForegroundColor Yellow
+            $content = $si.Content
+            
+            # List all properties of ServiceInstance content to see what's available
+            $contentProps = $content | Get-Member -MemberType Property | Where-Object { $_.Name -like "*Storage*" -or $_.Name -like "*VSLM*" -or $_.Name -like "*Object*" }
+            Write-Host "Storage-related properties in ServiceInstance.Content:" -ForegroundColor Cyan
+            $contentProps | ForEach-Object { 
+                $propValue = $content.($_.Name)
+                Write-Host "  - $($_.Name): $($propValue)" -ForegroundColor White 
+            }
+        }
         
-        # Check if VslmDeleteSnapshot_Task method exists
-        $methods = $vslmService | Get-Member -MemberType Method | Where-Object { $_.Name -like "*Snapshot*" }
-        Write-Host "Available Snapshot Methods: $($methods.Name -join ', ')" -ForegroundColor Cyan
+        # Approach 3: Try connecting directly using VSLM endpoint (if available)
+        if (-not $vslmService) {
+            try {
+                Write-Host "Method 3: Attempting direct VSLM service connection..." -ForegroundColor Yellow
+                # Try to get the VSLM service through a direct MOB reference
+                $vslmMoRef = New-Object VMware.Vim.ManagedObjectReference
+                $vslmMoRef.Type = "VslmVStorageObjectManager"  
+                $vslmMoRef.Value = "VStorageObjectManager"
+                
+                $vslmService = Get-View -Id $vslmMoRef.Type-$vslmMoRef.Value -ErrorAction SilentlyContinue
+                if ($vslmService) {
+                    Write-Host "Method 3: Successfully connected to VSLM service via direct reference" -ForegroundColor Green
+                }
+            } catch {
+                Write-Host "Method 3: Direct VSLM connection failed: $_" -ForegroundColor Red
+            }
+        }
+        
+        # Check what we got
+        if ($vslmService) {
+            Write-Host "VSLM Service Type: $($vslmService.GetType().Name)" -ForegroundColor Cyan
+            Write-Host "VSLM Service MoRef: $($vslmService.MoRef.Type)-$($vslmService.MoRef.Value)" -ForegroundColor Cyan
+            
+            # Check available snapshot methods
+            $methods = $vslmService | Get-Member -MemberType Method | Where-Object { $_.Name -like "*Snapshot*" }
+            if ($methods) {
+                Write-Host "Available Snapshot Methods: $($methods.Name -join ', ')" -ForegroundColor Green
+            } else {
+                Write-Host "No snapshot methods found!" -ForegroundColor Red
+            }
+        } else {
+            throw "Could not locate VSLM Storage Object Manager service"
+        }
         
         # Create the storage object ID
         $storageObjectId = New-Object VMware.Vim.ID
