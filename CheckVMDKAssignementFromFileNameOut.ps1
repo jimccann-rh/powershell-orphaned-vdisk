@@ -1,25 +1,25 @@
 #!/usr/bin/env pwsh
-# Requires VMware PowerCLI and vSphere 6.7+ for FCD snapshot management
+# Requires VMware PowerCLI
 #
-# This script can now automatically remove FCD snapshots using the vSphere DeleteSnapshot_Task API!
+# Enhanced orphaned FCD detection and removal script with snapshot handling
 # 
 # FEATURES:
-# - Automatically detects and removes FCD snapshots before deleting orphaned FCDs
-# - Uses vSphere VSLM (Virtual Storage Lifecycle Management) APIs
-# - Provides detailed logging of snapshot removal process
-# - Falls back to manual instructions if automatic removal fails
+# - Detects orphaned First Class Disks (FCDs) not assigned to any VM
+# - Attempts automatic removal of orphaned FCDs  
+# - Detects FCDs with snapshots and provides detailed removal instructions
+# - Supports both interactive and automated execution
+# - Comprehensive logging to console and file
+#
+# FCD SNAPSHOT HANDLING:
+# When the script encounters an FCD with snapshots, it provides three removal options:
+# 1. vSphere Client UI (recommended for most users)
+# 2. govc command line tool (for automation/scripting)  
+# 3. vSphere MOB (for advanced API users)
 #
 # REQUIREMENTS:
-# - vSphere 6.7 or later (for FCD snapshot management APIs)
-# - PowerCLI with appropriate permissions
-# - Datastore.FileManagement privilege on the target datastore
-#
-# FALLBACK OPTIONS (if automatic removal fails):
-# 1. vSphere Client UI (recommended)
-# 2. govc command line tool: 
-#    - List snapshots: govc disk.snapshot.ls <FCD-ID>
-#    - Remove snapshot: govc disk.snapshot.rm <FCD-ID> <snapshot-ID>
-# 3. vSphere MOB: https://<vcenter>/vslm/mob/?moid=VStorageObjectManager&method=VslmDeleteSnapshot_Task
+# - VMware PowerCLI
+# - vCenter Server connectivity
+# - Appropriate permissions for FCD management
 
 # Parameters
 param(
@@ -29,92 +29,9 @@ param(
     [switch]$RemoveOrphaned # Add a switch to control removal
 )
 
-# Helper functions for FCD snapshot management using vSphere API
-function Get-VDiskSnapshots {
-    param(
-        [Parameter(Mandatory=$true)]
-        [string]$VDiskId,
-        [Parameter(Mandatory=$true)]
-        [VMware.VimAutomation.ViCore.Types.V1.DatastoreManagement.Datastore]$Datastore
-    )
-    
-    try {
-        # Get the vSphere Storage Object Manager
-        $si = Get-View ServiceInstance
-        $vsom = Get-View $si.Content.VStorageObjectManager
-        
-        # Create the storage object ID
-        $storageObjectId = New-Object VMware.Vim.ID
-        $storageObjectId.Id = $VDiskId
-        
-        # List snapshots for the FCD
-        $snapshotInfo = $vsom.VslmListSnapshots($storageObjectId, $Datastore.ExtensionData.MoRef)
-        
-        # Extract snapshot IDs from the snapshot info
-        $snapshots = @()
-        if ($snapshotInfo -and $snapshotInfo.Snapshots) {
-            foreach ($snap in $snapshotInfo.Snapshots) {
-                $snapshots += [PSCustomObject]@{
-                    Id = $snap.Id.Id
-                    Description = $snap.Description
-                    CreateTime = $snap.CreateTime
-                }
-            }
-        }
-        
-        return $snapshots
-    }
-    catch {
-        Write-Warning "Could not retrieve snapshots for FCD $VDiskId using vSphere API: $_"
-        return @()
-    }
-}
-
-function Remove-VDiskSnapshot {
-    param(
-        [Parameter(Mandatory=$true)]
-        [string]$VDiskId,
-        [Parameter(Mandatory=$true)]
-        [string]$SnapshotId,
-        [Parameter(Mandatory=$true)]
-        [VMware.VimAutomation.ViCore.Types.V1.DatastoreManagement.Datastore]$Datastore
-    )
-    
-    try {
-        # Get the vSphere Storage Object Manager
-        $si = Get-View ServiceInstance
-        $vsom = Get-View $si.Content.VStorageObjectManager
-        
-        # Create the storage object ID
-        $storageObjectId = New-Object VMware.Vim.ID
-        $storageObjectId.Id = $VDiskId
-        
-        # Create snapshot ID object
-        $snapshotIdObj = New-Object VMware.Vim.ID
-        $snapshotIdObj.Id = $SnapshotId
-        
-        # Delete the snapshot using the DeleteSnapshot_Task API
-        $task = $vsom.VslmDeleteSnapshot_Task($storageObjectId, $Datastore.ExtensionData.MoRef, $snapshotIdObj)
-        
-        # Wait for task completion
-        $taskView = Get-View $task
-        while ($taskView.Info.State -eq "running") {
-            Start-Sleep -Seconds 2
-            $taskView.UpdateViewData()
-        }
-        
-        if ($taskView.Info.State -eq "success") {
-            Write-Verbose "Successfully removed snapshot $SnapshotId from FCD $VDiskId"
-            return $true
-        } else {
-            throw "Task failed: $($taskView.Info.Error.LocalizedMessage)"
-        }
-    }
-    catch {
-        Write-Error "Failed to remove snapshot $SnapshotId from FCD $VDiskId using vSphere API: $_"
-        throw
-    }
-}
+# Simplified approach: Detect snapshots via error messages and provide clear instructions
+# The vSphere VSLM API methods are complex and vary between versions
+# We'll detect snapshot issues and provide multiple removal options
 
 # Prompt for required parameters if not provided
 if (-not $vCenterServer) {
@@ -197,46 +114,37 @@ try {
             $outputString = "VMDK '$($item.Filename)' (Name: $($item.Name), ID: $($item.ID)) is not assigned to any VM."
                 if ($RemoveOrphaned) {
                     try {
-                        # Get the VDisk object first to check for snapshots
+                        # Try to remove the VDisk directly
                         $vdisk = Get-VDisk -Id $($item.ID)
-                        
-                        # Try to get FCD snapshots using vSphere API
-                        $fcdSnapshots = Get-VDiskSnapshots -VDiskId $($item.ID) -Datastore $vdisk.Datastore
-                        
-                        if ($fcdSnapshots.Count -gt 0) {
-                            Write-Host "Found $($fcdSnapshots.Count) snapshot(s) for VMDK: $($item.Filename)"
-                            $outputString += " Found $($fcdSnapshots.Count) snapshot(s)."
-                            
-                            # Remove each snapshot
-                            foreach ($snapshot in $fcdSnapshots) {
-                                try {
-                                    Write-Host "Removing snapshot: $($snapshot.Id) (Description: $($snapshot.Description), Created: $($snapshot.CreateTime))"
-                                    Remove-VDiskSnapshot -VDiskId $($item.ID) -SnapshotId $snapshot.Id -Datastore $vdisk.Datastore
-                                    Write-Host "Successfully removed snapshot: $($snapshot.Id)"
-                                    $outputString += " Removed snapshot: $($snapshot.Id)."
-                                }
-                                catch {
-                                    Write-Error "Failed to remove snapshot '$($snapshot.Id)': $_"
-                                    $outputString += " Failed to remove snapshot '$($snapshot.Id)': $_"
-                                    throw # Re-throw to prevent FCD removal if snapshot removal fails
-                                }
-                            }
-                        }
-                        
-                        # Now remove the VDisk
                         Remove-VDisk -VDisk $vdisk -Confirm:$false
-                        Write-Host "Removed orphaned VMDK: $($item.Filename)"
+                        Write-Host "Successfully removed orphaned VMDK: $($item.Filename)"
                         $outputString += " *Removed orphaned VMDK: $($item.Filename)"
                     }
                     catch {
                         # Check if the error is related to snapshots
                         if ($_.Exception.Message -like "*snapshot*" -or $_.Exception.Message -like "*Cannot be performed on FCD with snapshots*") {
-                            Write-Warning "VMDK '$($item.Filename)' has snapshots that couldn't be removed automatically."
-                            Write-Warning "You can try manual removal using one of these methods:"
-                            Write-Warning "1. Use VMware vSphere Client UI to delete snapshots"
-                            Write-Warning "2. Use govc command: govc disk.snapshot.ls $($item.ID) (to list) and govc disk.snapshot.rm $($item.ID) <snapshot-id> (to remove)"
-                            Write-Warning "3. Use vSphere MOB: https://<vcenter-ip>/vslm/mob/?moid=VStorageObjectManager&method=VslmDeleteSnapshot_Task"
-                            $outputString += " *ERROR: Has snapshots - automatic removal failed, manual removal required.*"
+                            Write-Host "⚠️  FCD SNAPSHOT DETECTED: $($item.Filename)" -ForegroundColor Yellow
+                            Write-Host "This FCD has snapshots and cannot be removed until snapshots are deleted." -ForegroundColor Yellow
+                            Write-Host ""
+                            Write-Host "🔧 MANUAL REMOVAL OPTIONS:" -ForegroundColor Cyan
+                            Write-Host "Option 1 - vSphere Client UI (Recommended):" -ForegroundColor Green
+                            Write-Host "  1. Open vSphere Client" 
+                            Write-Host "  2. Navigate to Storage > First Class Disks"
+                            Write-Host "  3. Find FCD: $($item.Name)"
+                            Write-Host "  4. Right-click > Manage Snapshots > Delete snapshots"
+                            Write-Host ""
+                            Write-Host "Option 2 - GOVC Command Line:" -ForegroundColor Green
+                            Write-Host "  # List snapshots:"
+                            Write-Host "  govc disk.snapshot.ls $($item.ID)" -ForegroundColor White
+                            Write-Host "  # Remove each snapshot (use snapshot ID from list):"
+                            Write-Host "  govc disk.snapshot.rm $($item.ID) <snapshot-id>" -ForegroundColor White
+                            Write-Host ""
+                            Write-Host "Option 3 - vSphere MOB (Advanced):" -ForegroundColor Green
+                            Write-Host "  URL: https://$vCenterServer/vslm/mob/?moid=VStorageObjectManager&method=VslmDeleteSnapshot_Task"
+                            Write-Host "  Parameters: id=$($item.ID), datastore=<datastore-moref>, snapshotId=<snapshot-id>"
+                            Write-Host ""
+                            Write-Host "After removing snapshots, re-run this script to delete the FCD." -ForegroundColor Cyan
+                            $outputString += " *ERROR: Has snapshots - manual removal required (see console for instructions)*"
                         } else {
                             Write-Error "Failed to remove VMDK '$($item.Filename)': $_"
                             $outputString += " Failed to remove VMDK '$($item.Filename)': $_"
