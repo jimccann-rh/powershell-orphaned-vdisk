@@ -129,8 +129,19 @@ try {
                                 $snapshotId = $matches[1].Trim()
                             }
                             
+                            # Extract UUID from FCD ID (remove datastore prefix)
+                            $fcdUuid = $item.ID
+                            if ($fcdUuid -match ":(.+)$") {
+                                $fcdUuid = $matches[1]
+                            }
+                            
+                            # Clean up snapshot ID for MOB usage (remove extra spaces)
+                            $cleanSnapshotId = $snapshotId -replace '\s+', ' '
+                            
                             Write-Host "⚠️  FCD SNAPSHOT DETECTED: $($item.Filename)" -ForegroundColor Yellow
                             Write-Host "This FCD has snapshots and cannot be removed until snapshots are deleted." -ForegroundColor Yellow
+                            Write-Host "Full FCD ID: $($item.ID)" -ForegroundColor White
+                            Write-Host "FCD UUID: $fcdUuid" -ForegroundColor White
                             if ($snapshotId) {
                                 Write-Host "Detected Snapshot ID: $snapshotId" -ForegroundColor Red
                             }
@@ -144,18 +155,32 @@ try {
                             Write-Host ""
                             Write-Host "Option 2 - GOVC Command Line:" -ForegroundColor Green
                             Write-Host "  # List snapshots:"
-                            Write-Host "  govc disk.snapshot.ls $($item.ID)" -ForegroundColor White
+                            Write-Host "  govc disk.snapshot.ls $fcdUuid" -ForegroundColor White
                             if ($snapshotId) {
                                 Write-Host "  # Remove the detected snapshot:"
-                                Write-Host "  govc disk.snapshot.rm $($item.ID) $snapshotId" -ForegroundColor White
+                                Write-Host "  govc disk.snapshot.rm $fcdUuid `"$snapshotId`"" -ForegroundColor White
                             } else {
                                 Write-Host "  # Remove each snapshot (use snapshot ID from list):"
-                                Write-Host "  govc disk.snapshot.rm $($item.ID) <snapshot-id>" -ForegroundColor White
+                                Write-Host "  govc disk.snapshot.rm $fcdUuid <snapshot-id>" -ForegroundColor White
                             }
                             Write-Host ""
                             Write-Host "Option 3 - vSphere MOB (Advanced):" -ForegroundColor Green
                             Write-Host "  URL: https://$vCenterServer/vslm/mob/?moid=VStorageObjectManager&method=VslmDeleteSnapshot_Task"
-                            Write-Host "  Parameters: id=$($item.ID), datastore=<datastore-moref>, snapshotId=<snapshot-id>"
+                            Write-Host "  FCD UUID (for 'id' parameter): $fcdUuid" -ForegroundColor White
+                            if ($cleanSnapshotId) {
+                                Write-Host "  Snapshot ID (for 'snapshotId' parameter): $cleanSnapshotId" -ForegroundColor White
+                                Write-Host "  MOB XML Input Format:" -ForegroundColor Cyan
+                                Write-Host "  name: id" -ForegroundColor White
+                                Write-Host "  <id>" -ForegroundColor White
+                                Write-Host "     <vim25:id xmlns:vim25=`"urn:vim25`">$fcdUuid</vim25:id>" -ForegroundColor White
+                                Write-Host "  </id>" -ForegroundColor White
+                                Write-Host "  name: snapshotId" -ForegroundColor White
+                                Write-Host "  <snapshotId>" -ForegroundColor White
+                                Write-Host "     <vim25:id xmlns:vim25=`"urn:vim25`">$cleanSnapshotId</vim25:id>" -ForegroundColor White
+                                Write-Host "  </snapshotId>" -ForegroundColor White
+                            } else {
+                                Write-Host "  Note: Use the snapshot ID from govc disk.snapshot.ls output" -ForegroundColor Yellow
+                            }
                             Write-Host ""
                             Write-Host "After removing snapshots, re-run this script to delete the FCD." -ForegroundColor Cyan
                             $outputString += " *ERROR: Has snapshots - manual removal required (see console for instructions)*"
