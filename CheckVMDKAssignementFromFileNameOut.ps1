@@ -59,9 +59,29 @@ function Remove-FCDSnapshot {
     try {
         Write-Host "Attempting to remove FCD snapshot automatically..." -ForegroundColor Cyan
         
-        # Get the vSphere Storage Object Manager
+        # Get the VSLM Storage Object Manager (VslmVStorageObjectManager type)
         $si = Get-View ServiceInstance
-        $vsom = Get-View $si.Content.VStorageObjectManager
+        
+        # Create MoRef for VStorageObjectManager that should be of type VslmVStorageObjectManager
+        $vslmMoRef = New-Object VMware.Vim.ManagedObjectReference
+        $vslmMoRef.Type = "VslmVStorageObjectManager"
+        $vslmMoRef.Value = "VStorageObjectManager"
+        
+        try {
+            $vslmService = Get-View $vslmMoRef
+            Write-Host "Successfully connected to VslmVStorageObjectManager" -ForegroundColor Green
+        } catch {
+            Write-Host "Failed to get VslmVStorageObjectManager, trying fallback..." -ForegroundColor Yellow
+            # Fallback: try getting it from ServiceInstance content
+            $vslmService = Get-View $si.Content.VStorageObjectManager
+        }
+        
+        # Debug: Show what type of object we got
+        Write-Host "Storage Object Manager Type: $($vslmService.GetType().Name)" -ForegroundColor Cyan
+        
+        # Check if VslmDeleteSnapshot_Task method exists
+        $methods = $vslmService | Get-Member -MemberType Method | Where-Object { $_.Name -like "*Snapshot*" }
+        Write-Host "Available Snapshot Methods: $($methods.Name -join ', ')" -ForegroundColor Cyan
         
         # Create the storage object ID
         $storageObjectId = New-Object VMware.Vim.ID
@@ -72,7 +92,17 @@ function Remove-FCDSnapshot {
         $snapshotIdObj.Id = $SnapshotId
         
         # Delete the snapshot using the VslmDeleteSnapshot_Task API
-        $task = $vsom.VslmDeleteSnapshot_Task($storageObjectId, $Datastore.ExtensionData.MoRef, $snapshotIdObj)
+        try {
+            Write-Host "Calling VslmDeleteSnapshot_Task method..." -ForegroundColor Yellow
+            $task = $vslmService.VslmDeleteSnapshot_Task($storageObjectId, $Datastore.ExtensionData.MoRef, $snapshotIdObj)
+            Write-Host "VslmDeleteSnapshot_Task called successfully" -ForegroundColor Green
+        } catch {
+            Write-Error "Failed to call VslmDeleteSnapshot_Task: $_"
+            Write-Host "All available methods on this object:" -ForegroundColor Red
+            $allMethods = $vslmService | Get-Member -MemberType Method
+            $allMethods | ForEach-Object { Write-Host "  - $($_.Name)" -ForegroundColor White }
+            throw "Method call failed"
+        }
         
         # Wait for task completion
         $taskView = Get-View $task
