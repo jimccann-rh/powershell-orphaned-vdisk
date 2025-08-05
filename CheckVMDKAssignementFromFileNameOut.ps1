@@ -110,11 +110,20 @@ function Remove-VDiskSnapshot {
 
 # Parameters
 param(
-    [string]$vCenterServer = $(Read-Host "Enter vCenter Server"),
-    [string]$vCenterUser = $(Read-Host "Enter vCenter Username"),
-    [string]$vCenterPassword = $(Read-Host "Enter vCenter Password - will be prompted"),
+    [string]$vCenterServer,
+    [string]$vCenterUser,
+    [string]$vCenterPassword,
     [switch]$RemoveOrphaned # Add a switch to control removal
 )
+
+# Prompt for required parameters if not provided
+if (-not $vCenterServer) {
+    $vCenterServer = Read-Host "Enter vCenter Server"
+}
+
+if (-not $vCenterUser) {
+    $vCenterUser = Read-Host "Enter vCenter Username"
+}
 
 if (-not $vCenterPassword) {
     $vCenterPassword = Read-Host -AsSecureString "Enter vCenter Password" | ConvertFrom-SecureString
