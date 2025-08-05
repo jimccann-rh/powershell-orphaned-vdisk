@@ -1,5 +1,15 @@
 #!/usr/bin/env pwsh
 # Requires VMware PowerCLI
+#
+# IMPORTANT: This script cannot automatically remove FCDs that have snapshots.
+# If a FCD has snapshots, you'll need to remove them manually first using:
+# 1. vSphere Client UI (recommended)
+# 2. govc command line tool: 
+#    - List snapshots: govc disk.snapshot.ls <FCD-ID>
+#    - Remove snapshot: govc disk.snapshot.rm <FCD-ID> <snapshot-ID>
+# 3. vSphere MOB (Managed Object Browser)
+#
+# PowerCLI does not have native cmdlets for managing FCD snapshots.
 
 # Parameters
 param(
@@ -81,36 +91,25 @@ try {
             $outputString = "VMDK '$($item.Filename)' (Name: $($item.Name), ID: $($item.ID)) is not assigned to any VM."
                 if ($RemoveOrphaned) {
                     try {
-                        # Get the VDisk object
+                        # Try to remove the VDisk directly
                         $vdisk = Get-VDisk -Id $($item.ID)
-                        
-                        # Check for and remove snapshots first
-                        $snapshots = Get-VDiskSnapshot -VDisk $vdisk -ErrorAction SilentlyContinue
-                        if ($snapshots) {
-                            Write-Host "Found $($snapshots.Count) snapshot(s) for VMDK: $($item.Filename)"
-                            $outputString += " Found $($snapshots.Count) snapshot(s)."
-                            foreach ($snapshot in $snapshots) {
-                                try {
-                                    Remove-VDiskSnapshot -VDiskSnapshot $snapshot -Confirm:$false
-                                    Write-Host "Removed snapshot: $($snapshot.Name)"
-                                    $outputString += " Removed snapshot: $($snapshot.Name)."
-                                }
-                                catch {
-                                    Write-Error "Failed to remove snapshot '$($snapshot.Name)': $_"
-                                    $outputString += " Failed to remove snapshot '$($snapshot.Name)': $_"
-                                    throw # Re-throw to prevent FCD removal if snapshot removal fails
-                                }
-                            }
-                        }
-                        
-                        # Now remove the VDisk
                         Remove-VDisk -VDisk $vdisk -Confirm:$false
                         Write-Host "Removed orphaned VMDK: $($item.Filename)"
                         $outputString += " *Removed orphaned VMDK: $($item.Filename)"
                     }
                     catch {
-                        Write-Error "Failed to remove VMDK '$($item.Filename)': $_"
-                        $outputString += " Failed to remove VMDK '$($item.Filename)': $_"
+                        # Check if the error is related to snapshots
+                        if ($_.Exception.Message -like "*snapshot*" -or $_.Exception.Message -like "*Cannot be performed on FCD with snapshots*") {
+                            Write-Warning "VMDK '$($item.Filename)' has snapshots and cannot be removed automatically."
+                            Write-Warning "You need to manually remove FCD snapshots first using one of these methods:"
+                            Write-Warning "1. Use VMware vSphere Client UI to delete snapshots"
+                            Write-Warning "2. Use govc command: govc disk.snapshot.ls $($item.ID) (to list) and govc disk.snapshot.rm $($item.ID) <snapshot-id> (to remove)"
+                            Write-Warning "3. Use vSphere MOB (Managed Object Browser) to delete snapshots manually"
+                            $outputString += " *ERROR: Has snapshots - manual removal required. See console for instructions.*"
+                        } else {
+                            Write-Error "Failed to remove VMDK '$($item.Filename)': $_"
+                            $outputString += " Failed to remove VMDK '$($item.Filename)': $_"
+                        }
                     }
                 }
         }
