@@ -7,6 +7,7 @@
 # - Detects orphaned First Class Disks (FCDs) not assigned to any VM
 # - AUTOMATICALLY removes FCD snapshots using vSphere VSLM API
 # - AUTOMATICALLY removes orphaned FCDs after snapshot cleanup
+# - AUTOMATICALLY reconciles datastore inventory after FCD operations
 # - Falls back to manual instructions if automation fails
 # - Comprehensive logging to console and file
 # - Real-time progress indicators
@@ -18,6 +19,13 @@
 # ✅ Waits for snapshot removal completion
 # ✅ Removes the FCD automatically after snapshot cleanup
 # ✅ Provides manual fallback options if automation fails
+#
+# DATASTORE INVENTORY RECONCILIATION:
+# ✅ Extracts datastore MOIDs from processed FCDs
+# ✅ Calls ReconcileDatastoreInventory_Task for affected datastores
+# ✅ Monitors reconciliation task completion with timeout
+# ✅ Ensures vSphere inventory synchronization after FCD operations
+# ✅ References Broadcom KB article 321994 for methodology
 #
 # REQUIREMENTS:
 # - VMware PowerCLI
@@ -35,7 +43,8 @@
 #    b. If snapshots exist, automatically remove them using vSphere API
 #    c. Remove the FCD after snapshot cleanup
 #    d. Provide manual instructions if automation fails
-# 3. Log all operations to console and file
+# 3. Reconcile datastore inventory for all affected datastores
+# 4. Log all operations to console and file
 
 # Parameters
 param(
@@ -44,6 +53,88 @@ param(
     [string]$vCenterPassword,
     [switch]$RemoveOrphaned # Add a switch to control removal
 )
+
+# Datastore inventory reconciliation function
+function Invoke-DatastoreReconciliation {
+    param(
+        [Parameter(Mandatory=$true)]
+        [string[]]$DatastoreMOIDs
+    )
+    
+    if (-not $DatastoreMOIDs -or $DatastoreMOIDs.Count -eq 0) {
+        Write-Host "No datastores to reconcile" -ForegroundColor Yellow
+        return
+    }
+    
+    Write-Host ""
+    Write-Host "🔄 DATASTORE INVENTORY RECONCILIATION" -ForegroundColor Cyan
+    Write-Host "Synchronizing vSphere inventory with datastore metadata after FCD operations..." -ForegroundColor Yellow
+    Write-Host "Reference: https://knowledge.broadcom.com/external/article/321994/" -ForegroundColor Gray
+    Write-Host ""
+    
+    try {
+        # Get the vStorageObjectManager for reconciliation
+        $si = Get-View ServiceInstance
+        $vsom = Get-View $si.Content.VStorageObjectManager
+        
+        $uniqueDatastores = $DatastoreMOIDs | Sort-Object -Unique
+        Write-Host "Found $($uniqueDatastores.Count) unique datastore(s) to reconcile:" -ForegroundColor Cyan
+        
+        foreach ($datastoreMOID in $uniqueDatastores) {
+            try {
+                Write-Host "  📁 Reconciling datastore: $datastoreMOID" -ForegroundColor White
+                
+                # Create datastore MoRef for reconciliation
+                $datastoreMoRef = New-Object VMware.Vim.ManagedObjectReference
+                $datastoreMoRef.Type = "Datastore"
+                $datastoreMoRef.Value = $datastoreMOID
+                
+                # Invoke ReconcileDatastoreInventory_Task
+                $reconcileTask = $vsom.ReconcileDatastoreInventory_Task($datastoreMoRef)
+                
+                if ($reconcileTask) {
+                    Write-Host "    ⏳ Reconciliation task started..." -ForegroundColor Yellow
+                    
+                    # Monitor task progress
+                    $taskView = Get-View $reconcileTask
+                    $timeout = 300 # 5 minute timeout for reconciliation
+                    $elapsed = 0
+                    
+                    while ($taskView.Info.State -eq "running" -and $elapsed -lt $timeout) {
+                        Start-Sleep -Seconds 10
+                        $elapsed += 10
+                        $taskView.UpdateViewData()
+                        Write-Host "." -NoNewline -ForegroundColor Yellow
+                    }
+                    Write-Host ""
+                    
+                    if ($taskView.Info.State -eq "success") {
+                        Write-Host "    ✅ Datastore $datastoreMOID reconciliation completed successfully" -ForegroundColor Green
+                    } elseif ($elapsed -ge $timeout) {
+                        Write-Warning "    ⏱️  Reconciliation task timed out after $timeout seconds"
+                    } else {
+                        $errorMsg = if ($taskView.Info.Error) { $taskView.Info.Error.LocalizedMessage } else { "Unknown error" }
+                        Write-Warning "    ❌ Reconciliation task failed: $errorMsg"
+                    }
+                } else {
+                    Write-Warning "    ❌ Failed to start reconciliation task for datastore $datastoreMOID"
+                }
+            }
+            catch {
+                Write-Warning "    ❌ Failed to reconcile datastore $datastoreMOID`: $_"
+            }
+        }
+        
+        Write-Host ""
+        Write-Host "📊 RECONCILIATION SUMMARY:" -ForegroundColor Cyan
+        Write-Host "  - Processed $($uniqueDatastores.Count) datastore(s)" -ForegroundColor White
+        Write-Host "  - Inventory synchronization helps ensure vSphere catalog accuracy" -ForegroundColor White
+        Write-Host "  - This operation corrects discrepancies between vSphere inventory and datastore metadata" -ForegroundColor White
+    }
+    catch {
+        Write-Error "Failed to perform datastore reconciliation: $_"
+    }
+}
 
 # Automated FCD snapshot removal using vSphere VSLM API
 function Remove-FCDSnapshot {
@@ -235,6 +326,9 @@ try {
     # Get all VMs
     $vms = Get-VM
 
+    # Initialize datastore MOID collection for reconciliation
+    $datastoreMOIDs = @()
+
     # Read INFO.txt file
     $infoFile = Get-Content -Path ./$filename1
 
@@ -261,6 +355,17 @@ try {
 
     # Process each VMDK path
     foreach ($item in $vmdkInfo) {
+        # Extract datastore MOID from FCD ID for reconciliation
+        # Format: "Datastore-datastore-2365:ffbf2d68-caf2-4c01-b5fa-d62224a029ad"
+        # We need: "datastore-2365"
+        if ($item.ID -match "^Datastore-(.+):") {
+            $datastoreMOID = $matches[1]
+            if ($datastoreMOIDs -notcontains $datastoreMOID) {
+                $datastoreMOIDs += $datastoreMOID
+                Write-Verbose "Added datastore MOID for reconciliation: $datastoreMOID"
+            }
+        }
+        
         $assignedVm = $null
         foreach ($vm in $vms) {
             $vmDisks = $vm | Get-HardDisk -ErrorAction SilentlyContinue
@@ -395,6 +500,30 @@ try {
         }
         Write-Host $outputString #output to console
         $outputString | Out-File -FilePath ./$filename2 -Append -Encoding UTF8 #output to file
+    }
+    
+    # Perform datastore inventory reconciliation after all FCD operations
+    if ($RemoveOrphaned -and $datastoreMOIDs.Count -gt 0) {
+        Write-Host ""
+        Write-Host "========================================" -ForegroundColor Cyan
+        Write-Host "DATASTORE RECONCILIATION PHASE" -ForegroundColor Cyan  
+        Write-Host "========================================" -ForegroundColor Cyan
+        
+        try {
+            Invoke-DatastoreReconciliation -DatastoreMOIDs $datastoreMOIDs
+        }
+        catch {
+            Write-Warning "Datastore reconciliation encountered an error: $_"
+            Write-Host "Manual reconciliation may be required using vSphere MOB:" -ForegroundColor Yellow
+            Write-Host "https://$vCenterServer/mob/?moid=VStorageObjectManager&method=ReconcileDatastoreInventory_Task" -ForegroundColor White
+        }
+    } elseif ($RemoveOrphaned) {
+        Write-Host ""
+        Write-Host "ℹ️  No datastore reconciliation needed - no FCDs were processed for removal" -ForegroundColor Cyan
+    } else {
+        Write-Host ""
+        Write-Host "ℹ️  Datastore reconciliation skipped - running in report-only mode" -ForegroundColor Cyan
+        Write-Host "   Use -RemoveOrphaned flag to enable FCD removal and automatic reconciliation" -ForegroundColor Gray
     }
 }
 catch {
