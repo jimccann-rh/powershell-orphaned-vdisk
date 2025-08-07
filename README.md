@@ -41,11 +41,44 @@ This repository contains **two PowerShell scripts** that work together to identi
 - **🔄 Sequential Processing**: Removes snapshots first, then the FCD automatically
 - **📋 Manual Fallback**: Provides vSphere Client, GOVC, and MOB instructions if needed
 
+### **🔄 Datastore Inventory Reconciliation**
+
+**NEW**: Automatic datastore inventory synchronization after FCD operations!
+
+Based on [Broadcom KB article 321994](https://knowledge.broadcom.com/external/article/321994/reconciling-discrepancies-in-the-managed.html), this feature ensures vSphere inventory accuracy:
+
+- **🏪 MOID Extraction**: Automatically extracts datastore MOIDs from processed FCDs
+- **🔧 API Integration**: Calls `ReconcileDatastoreInventory_Task` for affected datastores
+- **⏱️ Task Monitoring**: Monitors reconciliation progress with 5-minute timeout
+- **🎯 Smart Processing**: Only reconciles datastores that had FCD operations
+- **📊 Progress Reporting**: Real-time status updates and completion summary
+- **🛡️ Error Handling**: Graceful failure with manual MOB instructions
+
+**Why Reconciliation Matters:**
+- Corrects discrepancies between vSphere inventory and datastore metadata
+- Prevents orphaned entries after FCD deletion operations
+- Ensures accurate storage reporting and management
+- Required after bulk FCD operations for inventory consistency
+
 ### **💡 How It Works**
 
 The 1st script GetFCDinfofile.ps1 gets information on FCD/VMDK and puts into a file to be viewed and it will be processed by the 2nd script.
 
 CheckVMDKAssignementFromFileNameOut.ps1 will used the data from the GetFCDinfofile.ps1 script to do the process of removing FCD/VMDK if the flag is set. Otherwise it will just make a report.
+
+**Complete Workflow with Reconciliation:**
+
+1. **Data Collection**: `GetFCDinfofile.ps1` scans and catalogs all FCDs
+2. **Analysis**: `CheckVMDKAssignementFromFileNameOut.ps1` identifies orphaned FCDs  
+3. **FCD Processing**: Removes orphaned FCDs (with automatic snapshot handling)
+4. **Datastore Reconciliation**: Synchronizes vSphere inventory with datastore metadata
+5. **Reporting**: Generates comprehensive logs and status reports
+
+**Reconciliation Process:**
+- Extracts datastore MOIDs from processed FCD IDs (`Datastore-datastore-123:uuid` → `datastore-123`)
+- Calls `ReconcileDatastoreInventory_Task` for each affected datastore
+- Monitors task completion with real-time progress indicators
+- Ensures vSphere catalog accurately reflects post-operation datastore state
 
 
 ### **⚙️ Requirements**
@@ -69,10 +102,11 @@ CheckVMDKAssignementFromFileNameOut.ps1 will used the data from the GetFCDinfofi
    # Report only (safe mode)
    ./CheckVMDKAssignementFromFileNameOut.ps1 -vCenterServer "vcenter.local.com" -vCenterUser "admin@vsphere.local"
    
-   # Automated removal (with snapshot handling)
+   # Automated removal (with snapshot handling + datastore reconciliation)
    ./CheckVMDKAssignementFromFileNameOut.ps1 -vCenterServer "vcenter.local.com" -vCenterUser "admin@vsphere.local" -RemoveOrphaned
    ```
    - Creates `[vcenter-name]-PROCESSED.txt` with results
+   - Automatically reconciles affected datastores after FCD operations
 
 ### **🛡️ Safety Features**
 
@@ -80,8 +114,10 @@ CheckVMDKAssignementFromFileNameOut.ps1 will used the data from the GetFCDinfofi
 - ✅ **Read-Only Mode**: Default operation generates reports without changes
 - ✅ **Explicit Removal Flag**: Requires `-RemoveOrphaned` parameter for deletions
 - ✅ **Snapshot Detection**: Handles FCDs with snapshots automatically or provides manual guidance
+- ✅ **Datastore Reconciliation**: Automatic inventory synchronization after FCD operations
 - ✅ **Error Recovery**: Comprehensive error handling with fallback instructions
 - ✅ **Detailed Logging**: Complete audit trail of all operations
+- ✅ **Task Monitoring**: Real-time progress tracking with timeout protection
 
 ### **📊 Output Files**
 
@@ -95,7 +131,10 @@ CheckVMDKAssignementFromFileNameOut.ps1 will used the data from the GetFCDinfofi
 - **🧹 Storage Cleanup**: Remove orphaned FCDs consuming datastore space
 - **📋 Compliance Auditing**: Generate reports of unattached storage objects  
 - **🔍 Storage Analysis**: Understand FCD usage patterns across your environment
+- **🔄 Inventory Maintenance**: Ensure vSphere catalog accuracy after bulk operations
 - **⚡ Automation**: Integrate into scheduled maintenance workflows
+- **🛠️ Post-Migration Cleanup**: Clean up orphaned storage after VM migrations
+- **📊 Storage Optimization**: Identify and reclaim unused storage resources
 
 Example RUN below:
 
